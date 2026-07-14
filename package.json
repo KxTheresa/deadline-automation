@@ -1,8 +1,14 @@
 {
-  "name": "typescript-claude",
+  "name": "deadline-automation",
   "module": "index.ts",
   "type": "module",
   "private": true,
+  "scripts": {
+    "start": "bun run app.ts",
+    "scan": "bun run index.ts",
+    "schedule": "bun run scheduler.ts",
+    "dev": "bun run server.ts"
+  },
   "devDependencies": {
     "@types/bun": "latest",
     "@types/react": "^19.2.17",
@@ -23,6 +29,7 @@
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "rrule": "^2.8.1",
-    "tailwind-merge": "^3.6.0"
+    "tailwind-merge": "^3.6.0",
+    "zod": "^4.4.3"
   }
 }

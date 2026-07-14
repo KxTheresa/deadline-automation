@@ -44,11 +44,18 @@ function scheduleNext() {
     }, delay);
 }
 
-consola.ready(`Daily scan scheduler started (${String(HOUR).padStart(2, "0")}:${String(MINUTE).padStart(2, "0")})`);
+export function startScheduler() {
+    consola.ready(
+        `Daily scan scheduler started (${String(HOUR).padStart(2, "0")}:${String(MINUTE).padStart(2, "0")})`,
+    );
 
-// Optionally run once on startup (useful for testing / first boot).
-if (["1", "true", "yes"].includes((process.env.SCAN_ON_START ?? "").toLowerCase())) {
-    runScan().catch((err) => consola.error(err));
+    // Optionally run once on startup (useful for testing / first boot).
+    if (["1", "true", "yes"].includes((process.env.SCAN_ON_START ?? "").toLowerCase())) {
+        runScan().catch((err) => consola.error(err));
+    }
+
+    scheduleNext();
 }
 
-scheduleNext();
+// Run directly (`bun run scheduler.ts`); when imported by app.ts this is skipped.
+if (import.meta.main) startScheduler();

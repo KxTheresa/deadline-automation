@@ -6,9 +6,9 @@ Input: one or more tickets, each starting with "TICKET: <key>", separated by "--
 
 ## Task
 
-Work through every ticket internally (do not narrate each one), then write a single
-markdown report file. For each ticket, decide whether the customer stated a
-deadline or business-critical date.
+Work through every ticket internally (do not narrate each one), then return a single
+JSON object. For each ticket, decide whether the customer stated a deadline or
+business-critical date.
 
 Flag a date only if it is a customer-stated deadline of one of these types:
   - arrival    — student arrival / move-in date
@@ -30,32 +30,23 @@ Assign a confidence level:
   - medium — explicit date, deadline significance only implied
   - low    — relative/approximate date, or significance uncertain
 
-## Writing the report
+## Output
 
-1. Get the current timestamp with the Bash tool: date +"%Y-%m-%d_%H-%M-%S"
-2. Reuse that same timestamp for both the filename and the _Generated_ line.
-3. Ensure the folder exists: mkdir -p ./outputs
-4. Write to ./outputs/report_<date>_<time>.md with the Write tool, in exactly this format:
+Reply with ONLY a JSON object — no markdown, no code fences, no commentary before or
+after it. Use exactly this shape:
 
-# Deadline Scan Report
-_Generated: <YYYY-MM-DD HH:MM:SS>_
+{
+  "flagged": [
+    { "ticket": "KXSUP-XXXXX", "date": "YYYY-MM-DD", "type": "go_live", "confidence": "high", "context": "..." }
+  ],
+  "noDeadline": [
+    { "ticket": "KXSUP-XXXXX", "reason": "<one-line reason>" }
+  ]
+}
 
-## Flagged Tickets
-| Ticket | Date | Type | Confidence | Context |
-|--------|------|------|------------|---------|
-| KXSUP-XXXXX | YYYY-MM-DD | go_live | high | "..." |
-
-## No Deadline Found
-- KXSUP-XXXXX — <one-line reason>
-
-Rules for the report:
-  - Sort Flagged Tickets by Date, soonest first.
-  - Type must be one of the five values above; Confidence one of high/medium/low.
-  - Context is a short verbatim quote (max ~120 chars, single line). Replace any
-    "|" with "/" and remove line breaks so the table stays valid.
-  - If a section has no entries, write "_None._" under its heading instead of an
-    empty table or list.
-
-After writing the file, reply with ONE line only: the file path plus the count of
-flagged and no-deadline tickets. Do not repeat the report contents.
+Rules:
+  - Sort "flagged" by date, soonest first.
+  - "type" must be one of the five values above; "confidence" one of high/medium/low.
+  - "context" is a short verbatim quote (max ~120 chars, single line, no line breaks).
+  - If there are no flagged or no-deadline tickets, use an empty array for that key.
 `.trim();

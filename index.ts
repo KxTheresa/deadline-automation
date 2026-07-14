@@ -2,7 +2,10 @@ import { query, tool, createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk"
 import { Version3Client } from "jira.js";
 import { z } from "zod";
 import { consola } from "consola";
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { SYSTEM_PROMPT } from "./prompts.ts";
+import type { ReportData } from "./report.ts";
 
 /** Jira v3 returns `description` as an ADF document; flatten it to plain text. */
 function adfToText(node: unknown): string {
@@ -40,8 +43,9 @@ function toIssue(issue: any): JiraIssue {
 
 export async function runScan() {
     const jiraToken = process.env.JIRA_API_TOKEN;
-    if (!jiraToken) {
-        consola.error("JIRA_API_TOKEN is not set. Add it to .env");
+    const jiraEmail = process.env.JIRA_EMAIL;
+    if (!jiraToken || !jiraEmail) {
+        consola.error("JIRA_API_TOKEN and JIRA_EMAIL must be set in .env");
         process.exit(1);
     }
 
@@ -49,7 +53,7 @@ export async function runScan() {
         host: "https://kineticsolutions.atlassian.net",
         authentication: {
             basic: {
-                email: "theresa.ong@kineticsoftware.com",
+                email: jiraEmail,
                 apiToken: jiraToken,
             },
         },
@@ -87,9 +91,7 @@ export async function runScan() {
     });
 
     // Run the agent
-    const prompt = issues
-        .map((i) => `TICKET: ${i.key}\n${i.description}`)
-        .join("\n\n---\n\n");
+    const prompt = issues.map((i) => `TICKET: ${i.key}\n${i.description}`).join("\n\n---\n\n");
 
     consola.start("Running agent...");
     const response = query({
@@ -98,10 +100,12 @@ export async function runScan() {
             systemPrompt: SYSTEM_PROMPT,
             model: "claude-sonnet-4-6",
             mcpServers: { tools: mcpDate },
-            allowedTools: ["Read", "Write", "Edit", "Bash", "Glob", "mcp__tools__getDate"],
+            allowedTools: ["mcp__tools__getDate"],
         },
     });
 
+    // The agent's final message is the JSON report.
+    let output = "";
     for await (const msg of response) {
         if (msg.type === "assistant") {
             for (const block of msg.message.content) {
@@ -112,8 +116,32 @@ export async function runScan() {
                 }
             }
         } else if (msg.type === "result" && msg.subtype === "success") {
-            consola.success(msg.result);
+            output = msg.result;
         }
+    }
+
+    // Parse the JSON the agent returned and write it for the dashboard.
+    const outputsDir = join(import.meta.dir, "outputs");
+    await mkdir(outputsDir, { recursive: true });
+    const now = new Date();
+    const p = (n: number) => String(n).padStart(2, "0");
+    const stamp = `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}_${p(now.getHours())}-${p(now.getMinutes())}-${p(now.getSeconds())}`;
+    const generated = `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())} ${p(now.getHours())}:${p(now.getMinutes())}:${p(now.getSeconds())}`;
+
+    try {
+        // Tolerate ```json fences or stray prose around the object.
+        const json = output.slice(output.indexOf("{"), output.lastIndexOf("}") + 1);
+        const parsed = JSON.parse(json) as Pick<ReportData, "flagged" | "noDeadline">;
+        const report: ReportData = {
+            generated,
+            flagged: parsed.flagged ?? [],
+            noDeadline: parsed.noDeadline ?? [],
+        };
+        const jsonPath = join(outputsDir, `report_${stamp}.json`);
+        await writeFile(jsonPath, JSON.stringify(report, null, 2), "utf-8");
+        consola.success(`Wrote ${jsonPath} (${report.flagged.length} flagged, ${report.noDeadline.length} no-deadline)`);
+    } catch (err) {
+        consola.error(`Agent did not return valid JSON: ${err}`);
     }
 }
 
